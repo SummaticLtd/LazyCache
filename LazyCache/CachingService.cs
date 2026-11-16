@@ -98,6 +98,8 @@ namespace LazyCache
             valueHasChangedType = false;
             switch (item)
             {
+                case SyncLazy<T> syncLazy:
+                    return syncLazy.Value;
                 case Lazy<T> lazy:
                     return lazy.Value;
                 case T variable:
@@ -114,7 +116,7 @@ namespace LazyCache
             // although this is probably not the fastest this should not get called on the main use case
             // where you just hit the first switch case above. 
             var itemsType = item?.GetType();
-            if (itemsType != null && itemsType.IsGenericType && itemsType.GetGenericTypeDefinition() == typeof(Lazy<>))
+            if (itemsType != null && itemsType.IsGenericType && (itemsType.GetGenericTypeDefinition() == typeof(SyncLazy<>) || itemsType.GetGenericTypeDefinition() == typeof(Lazy<>)))
             {
                 valueHasChangedType = true;
             }
@@ -139,6 +141,8 @@ namespace LazyCache
                 case Task<T> task:
                     return task;
                 // this is sync to async and only happens if you cache something sync and then get it later async
+                case SyncLazy<T> syncLazy:
+                    return Task.FromResult(syncLazy.Value);
                 case Lazy<T> lazy:
                     return Task.FromResult(lazy.Value);
                 case T variable:
@@ -174,6 +178,8 @@ namespace LazyCache
                         // before the original callback we need to unwrap the Lazy that holds the cache item
                         if (value is AsyncLazy<T> asyncCacheItem)
                             value = asyncCacheItem.IsValueCreated ? asyncCacheItem.Value : Task.FromResult(default(T));
+                        else if (value is SyncLazy<T> syncCacheItem)
+                            value = syncCacheItem.IsValueCreated ? syncCacheItem.Value : default(T);
                         else if (value is Lazy<T> cacheItem)
                             value = cacheItem.IsValueCreated ? cacheItem.Value : default(T);
 
@@ -324,7 +330,7 @@ namespace LazyCache
             object cacheItem;
 
             object CacheFactory(ICacheEntry entry) =>
-                new Lazy<T>(() =>
+                new SyncLazy<T>(() =>
                 {
                     var result = addItemFactory(entry);
                     SetAbsoluteExpirationFromRelative(entry);
