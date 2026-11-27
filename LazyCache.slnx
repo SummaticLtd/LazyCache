@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="LazyCache.UnitTests/LazyCache.UnitTests.csproj" />
+  <Project Path="LazyCache/LazyCache.csproj" />
+</Solution>
