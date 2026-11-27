@@ -47,19 +47,20 @@ namespace LazyCache
         /// </summary>
         public T GetOrAdd<T>(string key, Func<ICacheEntry, T> addItemFactory, MemoryCacheEntryOptions policy)
         {
+            // Lazy<T> requires a public parameterless constructor on T, which trimming cannot check for an unannotated T.
             object CacheFactory(ICacheEntry entry) =>
-                new Lazy<T>(() =>
+                new Lazy<object>(() =>
                 {
                     var result = addItemFactory(entry);
                     SetAbsoluteExpirationFromRelative(entry);
                     return result;
                 });
 
-            var cacheItem = (Lazy<T>)GetOrCreate(key, policy, CacheFactory);
+            var cacheItem = (Lazy<object>)GetOrCreate(key, policy, CacheFactory);
 
             try
             {
-                return cacheItem.Value;
+                return (T)cacheItem.Value;
             }
             catch //addItemFactory errored so do not cache the exception
             {
