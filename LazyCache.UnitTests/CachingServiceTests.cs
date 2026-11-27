@@ -2,18 +2,24 @@
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
-using FluentAssertions;
 using Microsoft.Extensions.Caching.Memory;
 using NUnit.Framework;
 
 namespace LazyCache.UnitTests
 {
     [TestFixture]
-    public class CachingServiceMemoryCacheProviderTests
+    public class CachingServiceTests
     {
         private CachingService sut;
 
         private static MemoryCacheEntryOptions Policy => new MemoryCacheEntryOptions();
+
+        private static Task<T> CreateCancelledTask<T>()
+        {
+            var tcs = new TaskCompletionSource<T>();
+            tcs.SetCanceled();
+            return tcs.Task;
+        }
 
         private ComplexTestObject testObject = new ComplexTestObject();
 
@@ -35,15 +41,14 @@ namespace LazyCache.UnitTests
         [Test]
         public void AddNullThrowsException()
         {
-            Action act = () => sut.Add<object>(TestKey, null, Policy);
-            act.Should().Throw<ArgumentNullException>();
+            Assert.Throws<ArgumentNullException>(() => sut.Add<object>(TestKey, null, Policy));
         }
 
         [Test]
         public void AddThenGetReturnsCachedObject()
         {
             sut.Add(TestKey, "testObject", Policy);
-            sut.TryGetValue<string>(TestKey, out var actual).Should().BeTrue();
+            Assert.IsTrue(sut.TryGetValue<string>(TestKey, out var actual));
             Assert.AreEqual("testObject", actual);
         }
 
@@ -52,16 +57,16 @@ namespace LazyCache.UnitTests
         {
             sut.Add(TestKey, "testObject", new MemoryCacheEntryOptions { AbsoluteExpiration = DateTimeOffset.Now.AddSeconds(1) });
             Thread.Sleep(1500);
-            sut.TryGetValue<string>(TestKey, out _).Should().BeFalse();
+            Assert.IsFalse(sut.TryGetValue<string>(TestKey, out _));
         }
 
         [Test]
         public void RemovedItemCannotBeRetrievedFromCache()
         {
             sut.Add(TestKey, new object(), Policy);
-            sut.TryGetValue<object>(TestKey, out _).Should().BeTrue();
+            Assert.IsTrue(sut.TryGetValue<object>(TestKey, out _));
             sut.Remove(TestKey);
-            sut.TryGetValue<object>(TestKey, out _).Should().BeFalse();
+            Assert.IsFalse(sut.TryGetValue<object>(TestKey, out _));
         }
 
         [Test]
@@ -134,8 +139,7 @@ namespace LazyCache.UnitTests
         [Test]
         public void GetOrAddAFailingFactoryDoesNotCacheIt()
         {
-            Action act = () => sut.GetOrAdd<ComplexTestObject>(TestKey, _ => throw new ApplicationException(), Policy);
-            act.Should().Throw<ApplicationException>();
+            Assert.Throws<ApplicationException>(() => sut.GetOrAdd<ComplexTestObject>(TestKey, _ => throw new ApplicationException(), Policy));
 
             var actual = sut.GetOrAdd(TestKey, _ => testObject, Policy);
 
@@ -204,7 +208,7 @@ namespace LazyCache.UnitTests
         public async Task GetOrAddAsyncACancelledTaskDoesNotCacheIt()
         {
             Assert.ThrowsAsync<TaskCanceledException>(async () =>
-                await sut.GetOrAddAsync(TestKey, _ => AsyncHelper.CreateCancelledTask<ComplexTestObject>(), Policy));
+                await sut.GetOrAddAsync(TestKey, _ => CreateCancelledTask<ComplexTestObject>(), Policy));
 
             var actual = await sut.GetOrAddAsync(TestKey, _ => Task.FromResult(testObject), Policy);
 
@@ -214,7 +218,7 @@ namespace LazyCache.UnitTests
         [Test]
         public void GetOrAddAsyncACancelledTaskReturnsTheCacelledTaskToConsumer()
         {
-            var cancelledTask = sut.GetOrAddAsync(TestKey, _ => AsyncHelper.CreateCancelledTask<ComplexTestObject>(), Policy);
+            var cancelledTask = sut.GetOrAddAsync(TestKey, _ => CreateCancelledTask<ComplexTestObject>(), Policy);
 
             Assert.That(cancelledTask, Is.Not.Null);
 
